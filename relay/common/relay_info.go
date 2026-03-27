@@ -150,6 +150,7 @@ type RelayInfo struct {
 	RuntimeHeadersOverride                map[string]interface{}
 	UseRuntimeHeadersOverride             bool
 	ParamOverrideAudit                    []string
+	ZeroOutputAccumulatedPromptTokens     int // accumulated prompt tokens from failed zero-output retries
 
 	PriceData types.PriceData
 

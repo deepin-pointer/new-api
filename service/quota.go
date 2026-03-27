@@ -257,6 +257,14 @@ func CalcOpenRouterCacheCreateTokens(usage dto.Usage, priceData types.PriceData)
 }
 
 func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.Usage, extraContent string) {
+	if relayInfo != nil && relayInfo.ZeroOutputAccumulatedPromptTokens > 0 {
+		if usage == nil {
+			usage = &dto.Usage{}
+		}
+		usage.PromptTokens += relayInfo.ZeroOutputAccumulatedPromptTokens
+		usage.TotalTokens += relayInfo.ZeroOutputAccumulatedPromptTokens
+		usage.PromptTokensDetails.TextTokens += relayInfo.ZeroOutputAccumulatedPromptTokens
+	}
 
 	useTimeSeconds := time.Now().Unix() - relayInfo.StartTime.Unix()
 	textInputTokens := usage.PromptTokensDetails.TextTokens

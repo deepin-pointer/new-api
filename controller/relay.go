@@ -171,7 +171,17 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		if newAPIError != nil {
 			newAPIError = service.NormalizeViolationFeeError(newAPIError)
 			if relayInfo.Billing != nil {
-				relayInfo.Billing.Refund(c)
+				if relayInfo.ZeroOutputAccumulatedPromptTokens > 0 {
+					// Charge for the zero output retries that happened before the final failure
+					usage := &dto.Usage{
+						PromptTokens:     relayInfo.ZeroOutputAccumulatedPromptTokens,
+						CompletionTokens: 0,
+						TotalTokens:      relayInfo.ZeroOutputAccumulatedPromptTokens,
+					}
+					service.PostTextConsumeQuota(c, relayInfo, usage, []string{"Zero output retries failed and charged"})
+				} else {
+					relayInfo.Billing.Refund(c)
+				}
 			}
 			service.ChargeViolationFeeIfNeeded(c, relayInfo, newAPIError)
 		}
@@ -208,15 +218,59 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		}
 		c.Request.Body = io.NopCloser(bodyStorage)
 
-		switch relayFormat {
-		case types.RelayFormatOpenAIRealtime:
-			newAPIError = relay.WssHelper(c, relayInfo)
-		case types.RelayFormatClaude:
-			newAPIError = relay.ClaudeHelper(c, relayInfo)
-		case types.RelayFormatGemini:
-			newAPIError = geminiRelayHandler(c, relayInfo)
-		default:
-			newAPIError = relayHandler(c, relayInfo)
+		for zeroOutputRetry := 0; zeroOutputRetry <= common.RetryTimesOnZeroOutput; zeroOutputRetry++ {
+			if zeroOutputRetry > 0 {
+				if _, seekErr := bodyStorage.Seek(0, io.SeekStart); seekErr == nil {
+					c.Request.Body = io.NopCloser(bodyStorage)
+				}
+			}
+
+			originalWriter := c.Writer
+			delayWriter := relaycommon.NewDelayResponseWriter(c.Writer, func(b []byte) bool {
+				str := string(b)
+				if strings.HasPrefix(str, "data:") {
+					if strings.Contains(str, `"content":`) && !strings.Contains(str, `"content":""`) && !strings.Contains(str, `"content":null`) {
+						return true
+					}
+					if strings.Contains(str, `"reasoning_content":`) && !strings.Contains(str, `"reasoning_content":""`) && !strings.Contains(str, `"reasoning_content":null`) {
+						return true
+					}
+					if strings.Contains(str, `"tool_calls":`) {
+						return true
+					}
+				}
+				return false
+			})
+
+			c.Writer = delayWriter
+
+			switch relayFormat {
+			case types.RelayFormatOpenAIRealtime:
+				newAPIError = relay.WssHelper(c, relayInfo)
+			case types.RelayFormatClaude:
+				newAPIError = relay.ClaudeHelper(c, relayInfo)
+			case types.RelayFormatGemini:
+				newAPIError = geminiRelayHandler(c, relayInfo)
+			default:
+				newAPIError = relayHandler(c, relayInfo)
+			}
+
+			if newAPIError != nil && newAPIError.GetErrorCode() == types.ErrorCodeZeroOutputToken {
+				delayWriter.Clear()
+				c.Writer = originalWriter
+
+				if zeroOutputRetry < common.RetryTimesOnZeroOutput {
+					logger.LogWarn(c, fmt.Sprintf("Zero output tokens detected. Channel %d inner retry %d/%d", channel.Id, zeroOutputRetry+1, common.RetryTimesOnZeroOutput))
+					continue
+				}
+				// If exhausted retries, simply fall through so normal logging and cross-channel retry can happen
+			} else {
+				if delayWriter.Written() || delayWriter.Size() > 0 {
+					_ = delayWriter.FlushHeadersAndBuffer()
+				}
+				c.Writer = originalWriter
+			}
+			break
 		}
 
 		if newAPIError == nil {

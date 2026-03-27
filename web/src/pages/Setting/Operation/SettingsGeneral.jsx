@@ -51,6 +51,7 @@ export default function GeneralSettings(props) {
     'general_setting.custom_currency_exchange_rate': '',
     QuotaPerUnit: '',
     RetryTimes: '',
+    RetryTimesOnZeroOutput: '',
     USDExchangeRate: '',
     DisplayTokenStatEnabled: false,
     DefaultCollapseSidebar: false,
@@ -198,6 +199,16 @@ export default function GeneralSettings(props) {
                   initValue={''}
                   placeholder={t('失败重试次数')}
                   onChange={handleFieldChange('RetryTimes')}
+                  showClear
+                />
+              </Col>
+              <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                <Form.Input
+                  field={'RetryTimesOnZeroOutput'}
+                  label={t('无输出重试次数')}
+                  initValue={''}
+                  placeholder={t('无输出重试次数')}
+                  onChange={handleFieldChange('RetryTimesOnZeroOutput')}
                   showClear
                 />
               </Col>

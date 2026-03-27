@@ -402,52 +402,107 @@ func testChannel(channel *model.Channel, testModel string, endpointType string, 
 		}
 	}
 
-	requestBody := bytes.NewBuffer(jsonData)
-	c.Request.Body = io.NopCloser(bytes.NewBuffer(jsonData))
-	resp, err := adaptor.DoRequest(c, info, requestBody)
-	if err != nil {
-		return testResult{
-			context:     c,
-			localErr:    err,
-			newAPIError: types.NewOpenAIError(err, types.ErrorCodeDoRequestFailed, http.StatusInternalServerError),
+	var usage *dto.Usage
+	var testLocalErr error
+	var testAPIErr *types.NewAPIError
+
+	for zeroOutputRetry := 0; zeroOutputRetry <= common.RetryTimesOnZeroOutput; zeroOutputRetry++ {
+		requestBody := bytes.NewBuffer(jsonData)
+		c.Request.Body = io.NopCloser(bytes.NewBuffer(jsonData))
+
+		originalWriter := c.Writer
+		delayWriter := relaycommon.NewDelayResponseWriter(c.Writer, func(b []byte) bool {
+			str := string(b)
+			if strings.HasPrefix(str, "data:") {
+				if strings.Contains(str, `"content":`) && !strings.Contains(str, `"content":""`) && !strings.Contains(str, `"content":null`) {
+					return true
+				}
+				if strings.Contains(str, `"reasoning_content":`) && !strings.Contains(str, `"reasoning_content":""`) && !strings.Contains(str, `"reasoning_content":null`) {
+					return true
+				}
+				if strings.Contains(str, `"tool_calls":`) {
+					return true
+				}
+			}
+			return false
+		})
+		c.Writer = delayWriter
+
+		var resp any
+		resp, testLocalErr = adaptor.DoRequest(c, info, requestBody)
+		if testLocalErr != nil {
+			testAPIErr = types.NewOpenAIError(testLocalErr, types.ErrorCodeDoRequestFailed, http.StatusInternalServerError)
+			c.Writer = originalWriter
+			break
 		}
-	}
-	var httpResp *http.Response
-	if resp != nil {
-		httpResp = resp.(*http.Response)
-		if httpResp.StatusCode != http.StatusOK {
-			err := service.RelayErrorHandler(c.Request.Context(), httpResp, true)
-			common.SysError(fmt.Sprintf(
-				"channel test bad response: channel_id=%d name=%s type=%d model=%s endpoint_type=%s status=%d err=%v",
-				channel.Id,
-				channel.Name,
-				channel.Type,
-				testModel,
-				endpointType,
-				httpResp.StatusCode,
-				err,
-			))
-			return testResult{
-				context:     c,
-				localErr:    err,
-				newAPIError: types.NewOpenAIError(err, types.ErrorCodeBadResponse, http.StatusInternalServerError),
+
+		var httpResp *http.Response
+		if resp != nil {
+			httpResp = resp.(*http.Response)
+			if httpResp.StatusCode != http.StatusOK {
+				testLocalErr = service.RelayErrorHandler(c.Request.Context(), httpResp, true)
+				common.SysError(fmt.Sprintf(
+					"channel test bad response: channel_id=%d name=%s type=%d model=%s endpoint_type=%s status=%d err=%v",
+					channel.Id,
+					channel.Name,
+					channel.Type,
+					testModel,
+					endpointType,
+					httpResp.StatusCode,
+					testLocalErr,
+				))
+				testAPIErr = types.NewOpenAIError(testLocalErr, types.ErrorCodeBadResponse, http.StatusInternalServerError)
+				c.Writer = originalWriter
+				break
 			}
 		}
-	}
-	usageA, respErr := adaptor.DoResponse(c, httpResp, info)
-	if respErr != nil {
-		return testResult{
-			context:     c,
-			localErr:    respErr,
-			newAPIError: respErr,
+
+		var usageA any
+		usageA, testAPIErr = adaptor.DoResponse(c, httpResp, info)
+		if testAPIErr != nil {
+			testLocalErr = testAPIErr
+			c.Writer = originalWriter
+			break
 		}
+
+		var usageErr error
+		usage, usageErr = coerceTestUsage(usageA, isStream, info.GetEstimatePromptTokens())
+		if usageErr != nil {
+			testLocalErr = usageErr
+			testAPIErr = types.NewOpenAIError(usageErr, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
+			c.Writer = originalWriter
+			break
+		}
+
+		if usage.CompletionTokens == 0 {
+			if zeroOutputRetry < common.RetryTimesOnZeroOutput {
+				common.SysLog(fmt.Sprintf("Zero output tokens detected on test. Channel %d inner retry %d/%d", channel.Id, zeroOutputRetry+1, common.RetryTimesOnZeroOutput))
+				delayWriter.Clear()
+				c.Writer = originalWriter
+				continue
+			} else {
+				testLocalErr = fmt.Errorf("zero output tokens")
+				testAPIErr = types.NewError(testLocalErr, types.ErrorCodeZeroOutputToken)
+				delayWriter.Clear()
+				c.Writer = originalWriter
+				break
+			}
+		}
+
+		testLocalErr = nil
+		testAPIErr = nil
+		if delayWriter.Written() || delayWriter.Size() > 0 {
+			_ = delayWriter.FlushHeadersAndBuffer()
+		}
+		c.Writer = originalWriter
+		break
 	}
-	usage, usageErr := coerceTestUsage(usageA, isStream, info.GetEstimatePromptTokens())
-	if usageErr != nil {
+
+	if testAPIErr != nil {
 		return testResult{
 			context:     c,
-			localErr:    usageErr,
-			newAPIError: types.NewOpenAIError(usageErr, types.ErrorCodeBadResponseBody, http.StatusInternalServerError),
+			localErr:    testLocalErr,
+			newAPIError: testAPIErr,
 		}
 	}
 	result := w.Result()
