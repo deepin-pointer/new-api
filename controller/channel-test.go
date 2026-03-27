@@ -750,9 +750,23 @@ func TestChannel(c *gin.Context) {
 	//		go func() { _ = channel.SaveChannelInfo() }()
 	//	}
 	//}()
+
+	var channelOtherSettings dto.ChannelOtherSettings
+	if channel.OtherSettings != "" {
+		_ = json.Unmarshal([]byte(channel.OtherSettings), &channelOtherSettings)
+	}
+
 	testModel := c.Query("model")
 	endpointType := c.Query("endpoint_type")
-	isStream, _ := strconv.ParseBool(c.Query("stream"))
+	if endpointType == "" {
+		endpointType = channelOtherSettings.TestEndpointType
+	}
+
+	isStream := channelOtherSettings.TestStream
+	if streamStr := c.Query("stream"); streamStr != "" {
+		isStream, _ = strconv.ParseBool(streamStr)
+	}
+
 	tik := time.Now()
 	result := testChannel(channel, testModel, endpointType, isStream)
 	if result.localErr != nil {
@@ -815,8 +829,14 @@ func testAllChannels(notify bool) error {
 				continue
 			}
 			isChannelEnabled := channel.Status == common.ChannelStatusEnabled
+
+			var channelOtherSettings dto.ChannelOtherSettings
+			if channel.OtherSettings != "" {
+				_ = json.Unmarshal([]byte(channel.OtherSettings), &channelOtherSettings)
+			}
+
 			tik := time.Now()
-			result := testChannel(channel, "", "", false)
+			result := testChannel(channel, "", channelOtherSettings.TestEndpointType, channelOtherSettings.TestStream)
 			tok := time.Now()
 			milliseconds := tok.Sub(tik).Milliseconds()
 

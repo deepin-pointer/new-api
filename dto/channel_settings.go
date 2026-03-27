@@ -40,6 +40,8 @@ type ChannelOtherSettings struct {
 	UpstreamModelUpdateLastDetectedModels []string      `json:"upstream_model_update_last_detected_models,omitempty"` // 上次检测到的可加入模型
 	UpstreamModelUpdateLastRemovedModels  []string      `json:"upstream_model_update_last_removed_models,omitempty"`  // 上次检测到的可删除模型
 	UpstreamModelUpdateIgnoredModels      []string      `json:"upstream_model_update_ignored_models,omitempty"`       // 手动忽略的模型
+	TestEndpointType                      string        `json:"test_endpoint_type,omitempty"`                         // 测试渠道时默认使用的接口类型
+	TestStream                            bool          `json:"test_stream,omitempty"`                                // 测试渠道时默认是否使用流式请求
 }
 
 func (s *ChannelOtherSettings) IsOpenRouterEnterprise() bool {

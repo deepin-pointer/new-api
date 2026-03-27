@@ -181,6 +181,8 @@ const EditChannelModal = (props) => {
     models: [],
     auto_ban: 1,
     test_model: '',
+    test_endpoint_type: '',
+    test_stream: false,
     groups: ['default'],
     priority: 0,
     weight: 0,
@@ -213,6 +215,28 @@ const EditChannelModal = (props) => {
     upstream_model_update_last_detected_models: [],
     upstream_model_update_ignored_models: '',
   };
+
+  const endpointTypeOptions = [
+    { value: '', label: t('自动检测') },
+    { value: 'openai', label: 'OpenAI (/v1/chat/completions)' },
+    { value: 'openai-response', label: 'OpenAI Response (/v1/responses)' },
+    {
+      value: 'openai-response-compact',
+      label: 'OpenAI Response Compaction (/v1/responses/compact)',
+    },
+    { value: 'anthropic', label: 'Anthropic (/v1/messages)' },
+    {
+      value: 'gemini',
+      label: 'Gemini (/v1beta/models/{model}:generateContent)',
+    },
+    { value: 'jina-rerank', label: 'Jina Rerank (/v1/rerank)' },
+    {
+      value: 'image-generation',
+      label: t('图像生成') + ' (/v1/images/generations)',
+    },
+    { value: 'embeddings', label: 'Embeddings (/v1/embeddings)' },
+  ];
+
   const [batch, setBatch] = useState(false);
   const [multiToSingle, setMultiToSingle] = useState(false);
   const [multiKeyMode, setMultiKeyMode] = useState('random');
@@ -3542,6 +3566,25 @@ const EditChannelModal = (props) => {
                     }
                     showClear
                   />
+                  <Row gutter={16}>
+                    <Col span={12}>
+                        <Form.Select
+                            field='test_endpoint_type'
+                            label={t('默认测试接口类型')}
+                            onChange={(value) => handleChannelOtherSettingsChange('test_endpoint_type', value)}
+                            optionList={endpointTypeOptions}
+                            initValue={inputs.test_endpoint_type}
+                        />
+                    </Col>
+                    <Col span={12}>
+                        <Form.Switch
+                            field='test_stream'
+                            label={t('默认使用流式测试')}
+                            onChange={(value) => handleChannelOtherSettingsChange('test_stream', value)}
+                            initValue={inputs.test_stream}
+                        />
+                    </Col>
+                  </Row>
                 </Card>
 
                 {/* Advanced Settings Toggle / Collapse */}

@@ -3322,6 +3322,8 @@
     "输入价格：{{symbol}}{{price}} / 1M tokens": "Цена ввода: {{symbol}}{{price}} / 1M tokens",
     "输出价格 {{symbol}}{{price}} / 1M tokens": "Цена вывода {{symbol}}{{price}} / 1M tokens",
     "输出价格：{{symbol}}{{price}} / 1M tokens": "Цена вывода: {{symbol}}{{price}} / 1M tokens",
-    "输出价格：{{symbol}}{{total}} / 1M tokens": "Цена вывода: {{symbol}}{{total}} / 1M tokens"
+    "输出价格：{{symbol}}{{total}} / 1M tokens": "Цена вывода: {{symbol}}{{total}} / 1M tokens",
+    "默认测试接口类型": "Тип конечной точки тестирования по умолчанию",
+    "默认使用流式测试": "Использовать потоковое тестирование по умолчанию"
   }
 }

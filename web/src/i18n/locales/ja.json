@@ -3289,6 +3289,8 @@
     "输入价格：{{symbol}}{{price}} / 1M tokens": "入力価格：{{symbol}}{{price}} / 1M tokens",
     "输出价格 {{symbol}}{{price}} / 1M tokens": "補完料金 {{symbol}}{{price}} / 1M tokens",
     "输出价格：{{symbol}}{{price}} / 1M tokens": "補完料金：{{symbol}}{{price}} / 1M tokens",
-    "输出价格：{{symbol}}{{total}} / 1M tokens": "補完料金：{{symbol}}{{total}} / 1M tokens"
+    "输出价格：{{symbol}}{{total}} / 1M tokens": "補完料金：{{symbol}}{{total}} / 1M tokens",
+    "默认测试接口类型": "デフォルトのテストエンドポイントタイプ",
+    "默认使用流式测试": "デフォルトでストリームテストを使用"
   }
 }

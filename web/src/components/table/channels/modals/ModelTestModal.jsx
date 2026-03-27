@@ -70,6 +70,22 @@ const ModelTestModal = ({
     }
   }, [streamToggleDisabled, isStreamTest, setIsStreamTest]);
 
+  React.useEffect(() => {
+    if (showModelTestModal && currentTestChannel) {
+        let endpointType = '';
+        let stream = false;
+        if (currentTestChannel.settings) {
+            try {
+                const settingsObj = JSON.parse(currentTestChannel.settings);
+                endpointType = settingsObj.test_endpoint_type || '';
+                stream = settingsObj.test_stream || false;
+            } catch (e) {}
+        }
+        setSelectedEndpointType(endpointType);
+        setIsStreamTest(stream);
+    }
+  }, [showModelTestModal, currentTestChannel, setSelectedEndpointType, setIsStreamTest]);
+
   const filteredModels = hasChannel
     ? currentTestChannel.models
         .split(',')
