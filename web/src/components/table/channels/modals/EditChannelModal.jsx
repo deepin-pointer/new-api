@@ -66,6 +66,7 @@ import JSONEditor from '../../../common/ui/JSONEditor';
 import SecureVerificationModal from '../../../common/modals/SecureVerificationModal';
 import StatusCodeRiskGuardModal from './StatusCodeRiskGuardModal';
 import ChannelKeyDisplay from '../../../common/ui/ChannelKeyDisplay';
+import { TimePicker } from '@douyinfe/semi-ui';
 import { useSecureVerification } from '../../../../hooks/common/useSecureVerification';
 import { createApiCalls } from '../../../../services/secureVerification';
 import {
@@ -214,6 +215,8 @@ const EditChannelModal = (props) => {
     upstream_model_update_last_check_time: 0,
     upstream_model_update_last_detected_models: [],
     upstream_model_update_ignored_models: '',
+    auto_enable_time: null,
+    auto_disable_time: null,
   };
 
   const endpointTypeOptions = [
@@ -2414,6 +2417,33 @@ const EditChannelModal = (props) => {
                         min={0}
                         onNumberChange={(value) => handleInputChange('weight', value)}
                         style={{ width: '100%' }}
+                      />
+                    </Col>
+                  </Row>
+
+                  <Row gutter={12}>
+                    <Col span={12}>
+                      <Form.TimePicker
+                        field='auto_enable_time'
+                        label={t('自动启用时间')}
+                        format='HH:mm'
+                        style={{ width: '100%' }}
+                        onChange={(value) => {
+                          const timeStr = value ? value.split(':').slice(0, 2).join(':') : "";
+                          handleInputChange('auto_enable_time', timeStr);
+                        }}
+                      />
+                    </Col>
+                    <Col span={12}>
+                      <Form.TimePicker
+                        field='auto_disable_time'
+                        label={t('自动禁用时间')}
+                        format='HH:mm'
+                        style={{ width: '100%' }}
+                        onChange={(value) => {
+                          const timeStr = value ? value.split(':').slice(0, 2).join(':') : "";
+                          handleInputChange('auto_disable_time', timeStr);
+                        }}
                       />
                     </Col>
                   </Row>

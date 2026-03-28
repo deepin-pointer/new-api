@@ -1955,3 +1955,40 @@ func OllamaVersion(c *gin.Context) {
 		},
 	})
 }
+
+func StartChannelAutoStatusTask() {
+	common.SysLog("Channel auto-status task started")
+	// ticker to run every minute
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		now := time.Now().Format("15:04")
+		var channels []*model.Channel
+		// using Like or simple equal, since HH:mm matches exactly. 
+		// Use Omit("key") to improve performance if needed, but here we just need ID and status.
+		err := model.DB.Where("auto_enable_time = ? OR auto_disable_time = ?", now, now).Find(&channels).Error
+		if err != nil {
+			common.SysError("failed to get channels for auto-status task: " + err.Error())
+			continue
+		}
+		
+		for _, channel := range channels {
+			targetStatus := -1
+			reason := ""
+			// Prioritize disable if both match (unlikely but safe)
+			if channel.AutoDisableTime != nil && *channel.AutoDisableTime == now {
+				targetStatus = common.ChannelStatusManuallyDisabled
+				reason = "Scheduled auto-disable"
+			} else if channel.AutoEnableTime != nil && *channel.AutoEnableTime == now {
+				targetStatus = common.ChannelStatusEnabled
+				reason = "Scheduled auto-enable"
+			}
+
+			if targetStatus != -1 && channel.Status != targetStatus {
+				model.UpdateChannelStatus(channel.Id, "", targetStatus, reason)
+				common.SysLog(fmt.Sprintf("channel %d status automatically updated to %d, reason: %s", channel.Id, targetStatus, reason))
+			}
+		}
+	}
+}

@@ -53,6 +53,9 @@ type Channel struct {
 
 	OtherSettings string `json:"settings" gorm:"column:settings"` // 其他设置，存储azure版本等不需要检索的信息，详见dto.ChannelOtherSettings
 
+	AutoEnableTime  *string `json:"auto_enable_time" gorm:"type:varchar(8)"`
+	AutoDisableTime *string `json:"auto_disable_time" gorm:"type:varchar(8)"`
+
 	// cache info
 	Keys []string `json:"-" gorm:"-"`
 }
