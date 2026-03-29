@@ -176,6 +176,102 @@ func TestShouldSkipRetryAfterChannelAffinityFailure(t *testing.T) {
 	}
 }
 
+func TestClearChannelAffinityCacheFromContext(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	ruleName := fmt.Sprintf("rule-clear-%d", time.Now().UnixNano())
+	affinityValue := fmt.Sprintf("pc-clear-%d", time.Now().UnixNano())
+	cacheKeySuffix := buildChannelAffinityCacheKeySuffix(operation_setting.ChannelAffinityRule{
+		Name:              ruleName,
+		IncludeRuleName:   true,
+		IncludeUsingGroup: true,
+	}, "default", affinityValue)
+
+	cache := getChannelAffinityCache()
+	require.NoError(t, cache.SetWithTTL(cacheKeySuffix, 31415, time.Minute))
+	t.Cleanup(func() {
+		_, _ = cache.DeleteMany([]string{cacheKeySuffix})
+	})
+
+	ctx := buildChannelAffinityTemplateContextForTest(channelAffinityMeta{
+		CacheKey:      channelAffinityCacheNamespace + ":" + cacheKeySuffix,
+		TTLSeconds:    600,
+		RuleName:      ruleName,
+		UsingGroup:    "default",
+		SkipRetry:     true,
+		ParamTemplate: map[string]interface{}{"top_p": 0.95},
+	})
+	ctx.Set(ginKeyChannelAffinitySkipRetry, true)
+	ctx.Set(ginKeyChannelAffinityLogInfo, map[string]interface{}{"rule_name": ruleName})
+
+	deleted := ClearChannelAffinityCacheFromContext(ctx)
+	require.True(t, deleted)
+
+	_, found, err := cache.Get(cacheKeySuffix)
+	require.NoError(t, err)
+	require.False(t, found)
+	require.False(t, ShouldSkipRetryAfterChannelAffinityFailure(ctx))
+
+	_, ok := getChannelAffinityMeta(ctx)
+	require.False(t, ok)
+
+	_, applied := ApplyChannelAffinityOverrideTemplate(ctx, map[string]interface{}{"temperature": 0.7})
+	require.False(t, applied)
+
+	logInfo, ok := ctx.Get(ginKeyChannelAffinityLogInfo)
+	require.True(t, ok)
+	require.Nil(t, logInfo)
+
+	cacheKey, ttlSeconds, ok := getChannelAffinityContext(ctx)
+	require.True(t, ok)
+	require.Equal(t, channelAffinityCacheNamespace+":"+cacheKeySuffix, cacheKey)
+	require.Equal(t, 600, ttlSeconds)
+}
+
+func TestGetPreferredChannelByAffinityAfterClearingDisabledStickyChannel(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	setting := operation_setting.GetChannelAffinitySetting()
+	originalRules := append([]operation_setting.ChannelAffinityRule(nil), setting.Rules...)
+	t.Cleanup(func() {
+		setting.Rules = originalRules
+	})
+
+	ruleName := fmt.Sprintf("rule-reselect-%d", time.Now().UnixNano())
+	setting.Rules = append([]operation_setting.ChannelAffinityRule{{
+		Name:              ruleName,
+		ModelRegex:        []string{"^gpt-test$"},
+		PathRegex:         []string{"/v1/responses"},
+		KeySources:        []operation_setting.ChannelAffinityKeySource{{Type: "gjson", Path: "prompt_cache_key"}},
+		TTLSeconds:        60,
+		IncludeUsingGroup: true,
+		IncludeRuleName:   true,
+	}}, originalRules...)
+
+	affinityValue := fmt.Sprintf("pc-reselect-%d", time.Now().UnixNano())
+	cacheKeySuffix := buildChannelAffinityCacheKeySuffix(setting.Rules[0], "default", affinityValue)
+	cache := getChannelAffinityCache()
+	require.NoError(t, cache.SetWithTTL(cacheKeySuffix, 27182, time.Minute))
+	t.Cleanup(func() {
+		_, _ = cache.DeleteMany([]string{cacheKeySuffix})
+	})
+
+	rec := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(rec)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(fmt.Sprintf(`{"prompt_cache_key":"%s"}`, affinityValue)))
+	ctx.Request.Header.Set("Content-Type", "application/json")
+
+	channelID, found := GetPreferredChannelByAffinity(ctx, "gpt-test", "default")
+	require.True(t, found)
+	require.Equal(t, 27182, channelID)
+
+	require.True(t, ClearChannelAffinityCacheFromContext(ctx))
+
+	channelID, found = GetPreferredChannelByAffinity(ctx, "gpt-test", "default")
+	require.False(t, found)
+	require.Zero(t, channelID)
+}
+
 func TestChannelAffinityHitCodexTemplatePassHeadersEffective(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

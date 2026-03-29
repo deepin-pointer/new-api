@@ -366,6 +366,14 @@ func getChannelAffinityMeta(c *gin.Context) (channelAffinityMeta, bool) {
 	return meta, true
 }
 
+func clearChannelAffinityRequestState(c *gin.Context) {
+	if c == nil {
+		return
+	}
+	c.Set(ginKeyChannelAffinityMeta, nil)
+	c.Set(ginKeyChannelAffinityLogInfo, nil)
+}
+
 func GetChannelAffinityStatsContext(c *gin.Context) (ChannelAffinityStatsContext, bool) {
 	if c == nil {
 		return ChannelAffinityStatsContext{}, false
@@ -621,6 +629,25 @@ func ShouldSkipRetryAfterChannelAffinityFailure(c *gin.Context) bool {
 		return false
 	}
 	return meta.SkipRetry
+}
+
+func ClearChannelAffinityCacheFromContext(c *gin.Context) bool {
+	if c == nil {
+		return false
+	}
+	cacheKey, _, ok := getChannelAffinityContext(c)
+	if !ok {
+		return false
+	}
+	cache := getChannelAffinityCache()
+	deleted, err := cache.DeleteMany([]string{cacheKey})
+	if err != nil {
+		common.SysError(fmt.Sprintf("channel affinity cache delete failed: key=%s, err=%v", cacheKey, err))
+		return false
+	}
+	clearChannelAffinityRequestState(c)
+	c.Set(ginKeyChannelAffinitySkipRetry, false)
+	return deleted[cache.FullKey(cacheKey)]
 }
 
 func MarkChannelAffinityUsed(c *gin.Context, selectedGroup string, channelID int) {
